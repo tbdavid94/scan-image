@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Enqueue Items</title>
+</head>
+<body>
+<h1>Scan</h1>
+<form id="enqueueForm">
+    <label for="image_name">Image Name:</label>
+    <input type="text" id="image_name" name="image_name" required>
+    <button type="submit">Enqueue</button>
+</form>
+<hr>
+<table id="enqueuedItemsTable">
+    <thead>
+    <tr>
+        <th>Enqueued Items</th>
+    </tr>
+    </thead>
+    <tbody></tbody>
+</table>
+<hr>
+<h1>Reports</h1>
+<ul id="fileList"></ul>
+
+<script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const enqueueForm = document.getElementById('enqueueForm');
+        const enqueuedItemsTable = document.getElementById('enqueuedItemsTable').getElementsByTagName('tbody')[0];
+
+        // Submit form
+        enqueueForm.addEventListener('submit', function (event) {
+            event.preventDefault();
+
+            const imageName = document.getElementById('image_name').value;
+
+            fetch('http://localhost:8080/enqueue', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ image_name: imageName }),
+            })
+                .then(response => response.json())
+                .then(data => {
+                    console.log(data);
+                    // Refresh the enqueued items after enqueue
+                    getEnqueuedItems();
+                    getReport();
+                })
+                .catch(error => console.error('Error:', error));
+        });
+
+        // Get enqueued items on page load
+        getEnqueuedItems();
+        getReport();
+
+        // Function to get enqueued items
+        function getEnqueuedItems() {
+            fetch('http://localhost:8080/get_enqueue_items')
+                .then(response => response.json())
+                .then(data => {
+                    // Clear the existing table rows
+                    enqueuedItemsTable.innerHTML = '';
+
+                    // Populate the table with enqueued items
+                    data.items.forEach(item => {
+                        const row = enqueuedItemsTable.insertRow();
+                        const cell = row.insertCell(0);
+                        cell.textContent = item;
+                    });
+                })
+                .catch(error => console.error('Error:', error));
+        }
+
+        function getReport() {
+            fetch('http://localhost:8080/list_reports')
+                .then(response => response.json())
+                .then(data => {
+                    const filteredData = data.files.filter(file => !file.startsWith("./reports"));
+                    const fileListElement = document.getElementById('fileList');
+                    buildFileTree(filteredData, fileListElement);
+                })
+                .catch(error => console.error('Error fetching data:', error));
+        }
+
+        function buildFileTree(files, parentElement) {
+            const tree = {};
+
+            // Xây dựng cây từ danh sách thư mục và file
+            files.forEach(file => {
+                const parts = file.split('/');
+                let currentLevel = tree;
+
+                parts.forEach(part => {
+                    currentLevel[part] = currentLevel[part] || {};
+                    currentLevel = currentLevel[part];
+                });
+            });
+
+            // Hàm đệ quy để xây dựng cây DOM từ cây dữ liệu
+            function buildDOMTree(node, parentElement) {
+                // Không hiển thị thư mục gốc "Root"
+                if (node.name !== "Root") {
+                    const listItem = document.createElement('li');
+                    listItem.textContent = node.name;
+
+                    if (node.children && Object.keys(node.children).length > 0) {
+                        const childList = document.createElement('ul');
+                        Object.keys(node.children).forEach(childName => {
+                            buildDOMTree({ name: childName, children: node.children[childName] }, childList);
+                        });
+                        listItem.appendChild(childList);
+                    }
+
+                    parentElement.appendChild(listItem);
+                } else {
+                    // Nếu là thư mục gốc "Root", tiếp tục đệ quy vào thư mục con
+                    Object.keys(node.children).forEach(childName => {
+                        buildDOMTree({ name: childName, children: node.children[childName] }, parentElement);
+                    });
+                }
+            }
+
+            // Bắt đầu xây dựng DOM từ cây dữ liệu
+            buildDOMTree({ name: "Root", children: tree }, parentElement);
+        }
+    });
+</script>
+
+</body>
+</html>
